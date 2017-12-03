@@ -28,7 +28,7 @@ def kubernetes_init():
             # master setup
             fabricio.run('mkdir -p $HOME/.kube')
             fabricio.run('cp /etc/kubernetes/admin.conf /home/vagrant/.kube/config', sudo=True)
-            fabricio.run('chown vagrant $HOME/.kube/config', sudo=True)
+            fabricio.run('chown vagrant /home/vagrant/.kube/config', sudo=True)
 
             # install Kubernetes network plugin
             fabricio.run(
