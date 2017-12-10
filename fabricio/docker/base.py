@@ -1,11 +1,24 @@
+import ctypes
 import itertools
+import multiprocessing
+import sys
 
 from cached_property import cached_property
+from fabric import api as fab, colors
+from fabric.exceptions import CommandTimeout, NetworkError
 from frozendict import frozendict
+
+import fabricio
 
 from fabricio import utils
 
 from .image import Image
+
+host_errors = (RuntimeError, NetworkError, CommandTimeout)
+
+
+class ServiceError(RuntimeError):
+    pass
 
 
 class Option(utils.default_property):
@@ -192,3 +205,67 @@ class BaseService(object):
     @property
     def info(self):
         raise NotImplementedError
+
+
+class FailoverService(BaseService):
+
+    def __init__(self, *args, **kwargs):
+        super(FailoverService, self).__init__(*args, **kwargs)
+        self.manager_found = multiprocessing.Event()
+        self.is_manager_call_count = multiprocessing.Value(ctypes.c_int, 0)
+        self.pull_errors = multiprocessing.Manager().dict()
+
+    def is_manager(self):
+        try:
+            if self.pull_errors.get(fab.env.host, False):
+                return False
+            is_manager = fabricio.run(
+                "docker info 2>&1 | grep 'Is Manager:'",
+                use_cache=True,
+            ).endswith('true')
+            if is_manager:
+                self.manager_found.set()
+            return is_manager
+        except host_errors as error:
+            fabricio.log(
+                'WARNING: {error}'.format(error=error),
+                output=sys.stderr,
+                color=colors.red,
+            )
+            return False
+        finally:
+            with self.is_manager_call_count.get_lock():
+                self.is_manager_call_count.value += 1
+                if self.is_manager_call_count.value >= len(fab.env.all_hosts):
+                    if not self.manager_found.is_set():
+                        msg = 'Service manager with pulled image was not found'
+                        raise ServiceError(msg)
+                    self.manager_found.clear()
+                    self.is_manager_call_count.value = 0
+
+    def pull_image(self, *args, **kwargs):
+        try:
+            return super(FailoverService, self).pull_image(*args, **kwargs)
+        except host_errors as error:
+            self.pull_errors[fab.env.host] = True
+            fabricio.log(
+                'WARNING: {error}'.format(error=error),
+                output=sys.stderr,
+                color=colors.red,
+            )
+
+    def migrate(self, *args, **kwargs):
+        if self.is_manager():
+            super(FailoverService, self).migrate(*args, **kwargs)
+
+    def migrate_back(self):
+        if self.is_manager():
+            super(FailoverService, self).migrate_back()
+
+    def backup(self):
+        if self.is_manager():
+            super(FailoverService, self).backup()
+
+    def restore(self, backup_name=None):
+        if self.is_manager():
+            super(FailoverService, self).restore(backup_name=backup_name)

@@ -1,4 +1,3 @@
-import ctypes
 import functools
 import hashlib
 import itertools
@@ -24,7 +23,7 @@ import fabricio
 
 from fabricio import utils
 
-from .base import BaseService, Option, Attribute
+from .base import FailoverService, Option, Attribute, ServiceError
 from .image import Image, ImageNotFoundError
 
 host_errors = (RuntimeError, NetworkError, CommandTimeout)
@@ -41,10 +40,6 @@ def get_option_value(string, option):
         value = shlex.split(part.split('=', 1)[-1])
         # removing \x00 necessary for Python 2.6
         return value and value[0].replace('\x00', '') or None
-
-
-class ServiceError(RuntimeError):
-    pass
 
 
 class ServiceNotFoundError(ServiceError):
@@ -194,71 +189,7 @@ class PlacementPrefOption(RemovableOption):
             )
 
 
-class _Base(BaseService):
-
-    def __init__(self, *args, **kwargs):
-        super(_Base, self).__init__(*args, **kwargs)
-        self.manager_found = multiprocessing.Event()
-        self.is_manager_call_count = multiprocessing.Value(ctypes.c_int, 0)
-        self.pull_errors = multiprocessing.Manager().dict()
-
-    def is_manager(self):
-        try:
-            if self.pull_errors.get(fab.env.host, False):
-                return False
-            is_manager = fabricio.run(
-                "docker info 2>&1 | grep 'Is Manager:'",
-                use_cache=True,
-            ).endswith('true')
-            if is_manager:
-                self.manager_found.set()
-            return is_manager
-        except host_errors as error:
-            fabricio.log(
-                'WARNING: {error}'.format(error=error),
-                output=sys.stderr,
-                color=colors.red,
-            )
-            return False
-        finally:
-            with self.is_manager_call_count.get_lock():
-                self.is_manager_call_count.value += 1
-                if self.is_manager_call_count.value >= len(fab.env.all_hosts):
-                    if not self.manager_found.is_set():
-                        msg = 'Service manager with pulled image was not found'
-                        raise ServiceError(msg)
-                    self.manager_found.clear()
-                    self.is_manager_call_count.value = 0
-
-    def pull_image(self, *args, **kwargs):
-        try:
-            return super(_Base, self).pull_image(*args, **kwargs)
-        except host_errors as error:
-            self.pull_errors[fab.env.host] = True
-            fabricio.log(
-                'WARNING: {error}'.format(error=error),
-                output=sys.stderr,
-                color=colors.red,
-            )
-
-    def migrate(self, *args, **kwargs):
-        if self.is_manager():
-            super(_Base, self).migrate(*args, **kwargs)
-
-    def migrate_back(self):
-        if self.is_manager():
-            super(_Base, self).migrate_back()
-
-    def backup(self):
-        if self.is_manager():
-            super(_Base, self).backup()
-
-    def restore(self, backup_name=None):
-        if self.is_manager():
-            super(_Base, self).restore(backup_name=backup_name)
-
-
-class Service(_Base):
+class Service(FailoverService):
 
     options_label_name = 'fabricio.service.options'
 
@@ -467,7 +398,7 @@ class Service(_Base):
         self.label = service_labels
 
 
-class Stack(_Base):
+class Stack(FailoverService):
 
     temp_dir = Attribute(default='/tmp')
 
