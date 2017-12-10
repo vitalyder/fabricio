@@ -226,7 +226,8 @@ class DockerTasks(Tasks):
         """
         revert service container(s) to a previous version
         """
-        self.service.revert()
+        with self.remote_tunnel():
+            self.service.revert()
 
     @fab.task
     @skip_unknown_host
@@ -234,11 +235,12 @@ class DockerTasks(Tasks):
         """
         apply new migrations
         """
-        self.service.migrate(
-            tag=tag,
-            registry=self.host_registry,
-            account=self.account,
-        )
+        with self.remote_tunnel():
+            self.service.migrate(
+                tag=tag,
+                registry=self.host_registry,
+                account=self.account,
+            )
 
     @fab.task(name='migrate-back')
     @skip_unknown_host
@@ -246,7 +248,8 @@ class DockerTasks(Tasks):
         """
         remove previously applied migrations if any
         """
-        self.service.migrate_back()
+        with self.remote_tunnel():
+            self.service.migrate_back()
 
     @fab.task
     @skip_unknown_host
@@ -254,7 +257,8 @@ class DockerTasks(Tasks):
         """
         backup service data
         """
-        self.service.backup()
+        with self.remote_tunnel():
+            self.service.backup()
 
     @fab.task
     @skip_unknown_host
@@ -262,7 +266,8 @@ class DockerTasks(Tasks):
         """
         restore service data
         """
-        self.service.restore(backup_name=backup_name)
+        with self.remote_tunnel():
+            self.service.restore(backup_name=backup_name)
 
     @fab.task
     @fab.hosts()
@@ -284,8 +289,11 @@ class DockerTasks(Tasks):
         """
         if self.registry is None and self.account is None:
             return
+        image = self.image[tag]
+        if not image:
+            return
         fabricio.local(
-            'docker pull {image}'.format(image=self.image[tag]),
+            'docker pull {image}'.format(image=image),
             quiet=False,
             use_cache=True,
         )
@@ -312,17 +320,20 @@ class DockerTasks(Tasks):
         """
         if self.registry is None and self.account is None:
             return
-        tag_with_registry = str(self.image[self.registry:tag:self.account])
+        image = self.image[tag]
+        if not image:
+            return
+        proxy_tag = image[self.registry:tag:self.account]
         fabricio.local(
             'docker tag {image} {tag}'.format(
-                image=self.image[tag],
-                tag=tag_with_registry,
+                image=image,
+                tag=proxy_tag,
             ),
             use_cache=True,
         )
         self.push_image(tag=tag)
         fabricio.local(
-            'docker rmi {tag}'.format(tag=tag_with_registry),
+            'docker rmi {tag}'.format(tag=proxy_tag),
             use_cache=True,
         )
 
@@ -376,12 +387,13 @@ class DockerTasks(Tasks):
         """
         update service to a new version
         """
-        updated = self.service.update(
-            tag=tag,
-            registry=self.host_registry,
-            account=self.account,
-            force=utils.strtobool(force),
-        )
+        with self.remote_tunnel():
+            updated = self.service.update(
+                tag=tag,
+                registry=self.host_registry,
+                account=self.account,
+                force=utils.strtobool(force),
+            )
         if not updated:
             fabricio.log('No changes detected, update skipped.')
 
@@ -444,22 +456,22 @@ class ImageBuildDockerTasks(DockerTasks):
         """
         build Docker image (see 'docker build --help' for available options)
         """
-        # default options
-        kwargs.setdefault('pull', True)
-        kwargs.setdefault('force-rm', True)
-
         for key, value in kwargs.items():
             try:
                 kwargs[key] = utils.strtobool(value)
             except ValueError:
                 pass
 
-        options = utils.Options(
-            tag=self.image[self.registry:tag:self.account],
-            **kwargs
-        )
+        image = self.image[self.registry:tag:self.account]
+        options = utils.Options(tag=image, **kwargs)
+
+        # default options
+        options.setdefault('pull', 1)
+        options.setdefault('force-rm', 1)
+
         fabricio.local(
             'docker build {options} {build_path}'.format(
+                image=image,
                 build_path=self.build_path,
                 options=options,
             ),
