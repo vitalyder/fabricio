@@ -15,7 +15,6 @@ import six
 
 from cached_property import cached_property
 from fabric import colors, api as fab
-from fabric.exceptions import CommandTimeout, NetworkError
 from frozendict import frozendict
 from six.moves import map, shlex_quote, range, filter, zip_longest
 
@@ -25,8 +24,6 @@ from fabricio import utils
 
 from .base import FailoverService, Option, Attribute, ServiceError
 from .image import Image, ImageNotFoundError
-
-host_errors = (RuntimeError, NetworkError, CommandTimeout)
 
 
 def get_option_value(string, option):
@@ -515,7 +512,7 @@ class Stack(FailoverService):
         current_tag = self.current_settings_tag
         if rollback:
             backup_tag, current_tag = current_tag, backup_tag
-        with contextlib.suppress(host_errors):
+        with contextlib.suppress(utils.host_errors):
             fabricio.run(
                 (
                     'docker rmi {backup_tag}'
@@ -531,7 +528,7 @@ class Stack(FailoverService):
         self.rotate_sentinel_images()
 
         labels = [(self.compose_label, settings)]
-        with contextlib.suppress(host_errors):
+        with contextlib.suppress(utils.host_errors):
             images = self.get_images()
             images and labels.append((self.images_info_label, images))
 
@@ -548,7 +545,7 @@ class Stack(FailoverService):
         )
         try:
             fabricio.run(build_command)
-        except host_errors as error:
+        except utils.host_errors as error:
             fabricio.log(
                 'WARNING: {error}'.format(error=error),
                 output=sys.stderr,

@@ -5,7 +5,6 @@ import sys
 
 from cached_property import cached_property
 from fabric import api as fab, colors
-from fabric.exceptions import CommandTimeout, NetworkError
 from frozendict import frozendict
 
 import fabricio
@@ -13,8 +12,6 @@ import fabricio
 from fabricio import utils
 
 from .image import Image
-
-host_errors = (RuntimeError, NetworkError, CommandTimeout)
 
 
 class ServiceError(RuntimeError):
@@ -226,7 +223,7 @@ class FailoverService(BaseService):
             if is_manager:
                 self.manager_found.set()
             return is_manager
-        except host_errors as error:
+        except utils.host_errors as error:
             fabricio.log(
                 'WARNING: {error}'.format(error=error),
                 output=sys.stderr,
@@ -246,7 +243,7 @@ class FailoverService(BaseService):
     def pull_image(self, *args, **kwargs):
         try:
             return super(FailoverService, self).pull_image(*args, **kwargs)
-        except host_errors as error:
+        except utils.host_errors as error:
             self.pull_errors[fab.env.host] = True
             fabricio.log(
                 'WARNING: {error}'.format(error=error),
