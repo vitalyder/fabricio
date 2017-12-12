@@ -8,14 +8,14 @@ from fabric import api as fab
 import fabricio
 
 from fabricio.apps.python.django import DjangoContainer, DjangoService, DjangoStack
-from fabricio.docker.service import FailoverService
+from fabricio.docker.service import ManagedService
 from tests import SucceededResult, docker_run_args_parser, args_parser, \
     docker_inspect_args_parser
 
 
 class DjangoContainerTestCase(unittest.TestCase):
 
-    @mock.patch.object(FailoverService, 'is_manager', return_value=True)
+    @mock.patch.object(ManagedService, 'is_manager', return_value=True)
     def test_migrate(self, *args):
         cases = dict(
             container_default=dict(
@@ -219,7 +219,7 @@ class DjangoContainerTestCase(unittest.TestCase):
                         service.migrate(**data['kwargs'])
                         run.assert_called_once()
 
-    @mock.patch.object(FailoverService, 'is_manager', return_value=True)
+    @mock.patch.object(ManagedService, 'is_manager', return_value=True)
     def test_migrate_back(self, *args):
         cases = dict(
             container_no_change=dict(

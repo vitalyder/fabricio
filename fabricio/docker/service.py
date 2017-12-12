@@ -22,7 +22,7 @@ import fabricio
 
 from fabricio import utils
 
-from .base import FailoverService, Option, Attribute, ServiceError
+from .base import ManagedService, Option, Attribute, ServiceError
 from .image import Image, ImageNotFoundError
 
 
@@ -186,7 +186,7 @@ class PlacementPrefOption(RemovableOption):
             )
 
 
-class Service(FailoverService):
+class Service(ManagedService):
 
     options_label_name = 'fabricio.service.options'
 
@@ -395,7 +395,7 @@ class Service(FailoverService):
         self.label = service_labels
 
 
-class Stack(FailoverService):
+class Stack(ManagedService):
 
     temp_dir = Attribute(default='/tmp')
 

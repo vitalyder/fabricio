@@ -204,10 +204,10 @@ class BaseService(object):
         raise NotImplementedError
 
 
-class FailoverService(BaseService):
+class ManagedService(BaseService):
 
     def __init__(self, *args, **kwargs):
-        super(FailoverService, self).__init__(*args, **kwargs)
+        super(ManagedService, self).__init__(*args, **kwargs)
         self.manager_found = multiprocessing.Event()
         self.is_manager_call_count = multiprocessing.Value(ctypes.c_int, 0)
         self.pull_errors = multiprocessing.Manager().dict()
@@ -242,7 +242,7 @@ class FailoverService(BaseService):
 
     def pull_image(self, *args, **kwargs):
         try:
-            return super(FailoverService, self).pull_image(*args, **kwargs)
+            return super(ManagedService, self).pull_image(*args, **kwargs)
         except utils.host_errors as error:
             self.pull_errors[fab.env.host] = True
             fabricio.log(
@@ -253,16 +253,16 @@ class FailoverService(BaseService):
 
     def migrate(self, *args, **kwargs):
         if self.is_manager():
-            super(FailoverService, self).migrate(*args, **kwargs)
+            super(ManagedService, self).migrate(*args, **kwargs)
 
     def migrate_back(self):
         if self.is_manager():
-            super(FailoverService, self).migrate_back()
+            super(ManagedService, self).migrate_back()
 
     def backup(self):
         if self.is_manager():
-            super(FailoverService, self).backup()
+            super(ManagedService, self).backup()
 
     def restore(self, backup_name=None):
         if self.is_manager():
-            super(FailoverService, self).restore(backup_name=backup_name)
+            super(ManagedService, self).restore(backup_name=backup_name)

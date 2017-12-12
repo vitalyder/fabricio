@@ -1,4 +1,4 @@
-from .base import Option, Attribute, BaseService, FailoverService, ServiceError
+from .base import Option, Attribute, BaseService, ManagedService, ServiceError
 from .image import Image, ImageNotFoundError, ImageError
 from .container import Container, ContainerNotFoundError, ContainerError
 from .registry import Registry
